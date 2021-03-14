@@ -413,11 +413,16 @@ void paint_all_new(session_t *ps, struct managed_win *t, bool ignore_damage) {
 		ps->damage = ps->damage_ring + ps->ndamage - 1;
 	}
 	pixman_region32_clear(ps->damage);
+	
+	ps->last_draw_end_time = get_time_timespec();
+	timespec_subtract(&ps->last_total_draw_time, &ps->last_draw_end_time, &ps->last_draw_beg_time);
 
 	if (ps->backend_data->ops->present) {
 		// Present the rendered scene
 		// Vsync is done here
 		ps->backend_data->ops->present(ps->backend_data, &reg_damage);
+		ps->last_presented_vblank_time = get_time_timespec();
+		ps->draw_data_exists = true;
 	}
 
 	pixman_region32_fini(&reg_damage);

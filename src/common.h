@@ -378,6 +378,13 @@ typedef struct session {
 #endif
 
 	int (*vsync_wait)(session_t *);
+	
+	struct timespec last_presented_vblank_time;
+	struct timespec last_total_draw_time;
+	struct timespec last_draw_beg_time;
+	struct timespec last_draw_end_time;
+	bool draw_data_exists;
+
 } session_t;
 
 /// Enumeration for window event hints.

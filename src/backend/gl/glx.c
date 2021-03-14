@@ -466,7 +466,12 @@ static void glx_present(backend_t *base, const region_t *region attr_unused) {
 	struct _glx_data *gd = (void *)base;
 	gl_present(base, region);
 	glXSwapBuffers(gd->display, gd->target_win);
-	glFinish();
+	// glFinish is apparently not needed if maxFramesAllowed is set to 1? 
+	// Since the above swap buffers call should block already.
+	// glFinish();
+	// NOTE: Actually, the above is not quite correct. Apparently, glXSwapBuffers
+	// blocks by default on nvidia with or without the flag? 
+	// (TODO: more testing is needed)
 }
 
 static int glx_buffer_age(backend_t *base) {
