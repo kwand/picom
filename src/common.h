@@ -130,6 +130,32 @@ typedef struct _latom {
 	struct _latom *next;
 } latom_t;
 
+#define LAST_PRESENTED_FRAMES_TO_LOG 30
+
+typedef struct _renderlog {
+	long _log[LAST_PRESENTED_FRAMES_TO_LOG]; // In nanoseconds.
+	int _log_write_head;
+	struct timespec _last_draw_beg_time;
+	struct timespec _last_draw_end_time;
+	struct timespec _last_vblank_time;
+	struct timespec _next_estimated_vblank_time;
+	bool _valid;
+	
+	long longest_render_time; 
+} render_log_t;
+
+#define RENDER_LOG_INIT							\
+	{											\
+		._log = { 0 },							\
+		._log_write_head = 0,					\
+		._last_draw_beg_time = { 0 },			\
+		._last_draw_end_time = { 0 }, 			\
+		._last_vblank_time = { 0 }, 			\
+		._next_estimated_vblank_time = { 0 },   \
+		._valid = false, 						\
+		.longest_render_time = 0				\
+	}
+
 /// Structure containing all necessary data for a session.
 typedef struct session {
 	// === Event handlers ===
@@ -379,11 +405,7 @@ typedef struct session {
 
 	int (*vsync_wait)(session_t *);
 	
-	struct timespec last_presented_vblank_time;
-	struct timespec last_total_draw_time;
-	struct timespec last_draw_beg_time;
-	struct timespec last_draw_end_time;
-	bool draw_data_exists;
+	render_log_t render_log;
 
 } session_t;
 
@@ -537,4 +559,85 @@ static inline void wintype_arr_enable(bool arr[]) {
 	for (i = 0; i < NUM_WINTYPES; ++i) {
 		arr[i] = true;
 	}
+}
+
+static inline bool render_log_is_valid(session_t *ps) {
+	return (ps->render_log.longest_render_time > 0) && (ps->render_log._valid);
+}
+
+static inline void renlog_beg_time(session_t *ps, struct timespec btime) {
+	ps->render_log._last_draw_beg_time = btime;
+	ps->render_log._valid = false;
+}
+
+static inline void renlog_end_time(session_t *ps, struct timespec etime) {
+	ps->render_log._last_draw_end_time = etime;
+	
+	struct timespec total_draw_time = { 0 };
+	timespec_subtract(&total_draw_time, &ps->render_log._last_draw_end_time, &ps->render_log._last_draw_beg_time);
+
+	// Commit this total drawing time to the log and advance the write head.
+	ps->render_log._log[ps->render_log._log_write_head] = total_draw_time.tv_nsec;
+	log_info("Render time: %ld", total_draw_time.tv_nsec);
+
+	if (ps->render_log._log_write_head == LAST_PRESENTED_FRAMES_TO_LOG - 1) {
+		ps->render_log._log_write_head = 0;
+	} else {
+		ps->render_log._log_write_head++;
+	}
+
+	// Find the longest render time in the log.
+	long _curr_max = 0;
+	for (int i = 0; i < LAST_PRESENTED_FRAMES_TO_LOG; i++) {
+		if (ps->render_log._log[i] > _curr_max) {
+			_curr_max = ps->render_log._log[i];
+		}
+	}
+	ps->render_log.longest_render_time = _curr_max;
+}
+
+static inline void renlog_last_vblank_time(session_t *ps, struct timespec last_vblank) {
+	ps->render_log._last_vblank_time = last_vblank;
+	ps->render_log._valid = true;
+}
+
+static inline bool estimate_next_vblank(session_t *ps, struct timespec *now) {
+	struct timespec diff = { 0 };
+	timespec_subtract(&diff, now, &ps->render_log._last_vblank_time);
+	
+	if (diff.tv_sec == 0 && diff.tv_nsec < NS_PER_SEC / 60) {
+		log_info("Last vblank is reliable.");
+		
+		struct timespec next_vblank = { 0 };
+
+		next_vblank.tv_sec = ps->render_log._last_vblank_time.tv_sec;
+		next_vblank.tv_nsec = ps->render_log._last_vblank_time.tv_nsec + NS_PER_SEC / 60;
+		if (next_vblank.tv_nsec > NS_PER_SEC) {
+			next_vblank.tv_sec++;
+		}
+		
+		ps->render_log._next_estimated_vblank_time = next_vblank;
+
+		return true;
+	}
+
+	return false;
+}
+
+static inline bool get_delay_time(session_t *ps, struct timespec *now, struct timespec *delay_time) {
+
+	struct timespec time_left_until_vblank;
+	timespec_subtract(&time_left_until_vblank, &ps->render_log._next_estimated_vblank_time, now);
+	log_info("%ld is left until next vblank time. The longest render time is %ld", 
+		time_left_until_vblank.tv_nsec, ps->render_log.longest_render_time);
+
+	long buffer = 3000000;
+	if (ps->render_log.longest_render_time + buffer < time_left_until_vblank.tv_nsec) {
+		delay_time->tv_sec = 0;
+		delay_time->tv_nsec = time_left_until_vblank.tv_nsec - (ps->render_log.longest_render_time + buffer);
+
+		return true;
+	}
+	
+	return false;
 }

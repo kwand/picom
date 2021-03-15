@@ -1470,46 +1470,58 @@ static void handle_pending_updates(EV_P_ struct session *ps) {
 
 static void draw_callback_impl(EV_P_ session_t *ps, int revents attr_unused) {
 	
-	// Attempt to delay drawing.
-	if (ps->draw_data_exists) {
-		// log_info("Attempting to delay drawing.");
-		// update_refresh_rate(ps);
-		// assert(ps->refresh_rate = 59.97);
-		long refresh_intv = NS_PER_SEC / 60;
+	// // Attempt to delay drawing.
+	// if (ps->draw_data_exists) {
+	// 	// log_info("Attempting to delay drawing.");
+	// 	// update_refresh_rate(ps);
+	// 	// assert(ps->refresh_rate = 59.97);
+	// 	long refresh_intv = NS_PER_SEC / 60;
 
+	// 	struct timespec now = get_time_timespec();
+		
+	// 	// First check if the last vblank time is reliable.
+	// 	struct timespec diff = {0};
+	// 	timespec_subtract(&diff, &now, &ps->last_presented_vblank_time);
+		
+	// 	if (diff.tv_sec == 0 && diff.tv_nsec < refresh_intv) {
+	// 		log_trace("Last vblank is reliable.");
+
+	// 		struct timespec next_estimated_vblank_time = ps->last_presented_vblank_time;
+	// 		next_estimated_vblank_time.tv_nsec += refresh_intv;
+	// 		if (next_estimated_vblank_time.tv_nsec > NS_PER_SEC) {
+	// 			next_estimated_vblank_time.tv_sec++;
+	// 		}
+			
+	// 		timespec_subtract(&diff, &next_estimated_vblank_time, &now);
+			
+	// 		// Buffer of 5 ms.
+	// 		assert(ps->last_total_draw_time == 0);
+	// 		long buffer = 5000000;
+	// 		if (ps->last_total_draw_time.tv_nsec + buffer < diff.tv_nsec) {
+	// 			log_trace("Delaying is possible. Now delaying...");
+
+	// 			struct timespec time_to_sleep = {0};
+	// 			time_to_sleep.tv_nsec = diff.tv_nsec - (ps->last_total_draw_time.tv_nsec + buffer);
+	// 			nanosleep(&time_to_sleep, NULL);
+	// 		} else {
+	// 			log_trace("Not possible to delay. Last drawing time was %ld.", ps->last_total_draw_time.tv_nsec);
+	// 		}
+	// 	}
+	// }
+
+	if (render_log_is_valid(ps)) {
 		struct timespec now = get_time_timespec();
-		
-		// First check if the last vblank time is reliable.
-		struct timespec diff = {0};
-		timespec_subtract(&diff, &now, &ps->last_presented_vblank_time);
-		
-		if (diff.tv_sec == 0 && diff.tv_nsec < refresh_intv) {
-			log_info("Last vblank is reliable.");
 
-			struct timespec next_estimated_vblank_time = ps->last_presented_vblank_time;
-			next_estimated_vblank_time.tv_nsec += refresh_intv;
-			if (next_estimated_vblank_time.tv_nsec > NS_PER_SEC) {
-				next_estimated_vblank_time.tv_sec++;
-			}
-			
-			timespec_subtract(&diff, &next_estimated_vblank_time, &now);
-			
-			// Buffer of 5 ms.
-			assert(ps->last_total_draw_time == 0);
-			long buffer = 5000000;
-			if (ps->last_total_draw_time.tv_nsec + buffer < diff.tv_nsec) {
-				log_info("Delaying is possible. Now delaying...");
-
-				struct timespec time_to_sleep = {0};
-				time_to_sleep.tv_nsec = diff.tv_nsec - (ps->last_total_draw_time.tv_nsec + buffer);
-				nanosleep(&time_to_sleep, NULL);
-			} else {
-				log_info("Not possible to delay. Last drawing time was %ld.", ps->last_total_draw_time.tv_nsec);
-			}
-		}
+		struct timespec delay_time = { 0 };
+		if (estimate_next_vblank(ps, &now) && get_delay_time(ps, &now, &delay_time)) {
+			log_info("Delaying by %ld.", delay_time.tv_nsec);
+			nanosleep(&delay_time, NULL);
+		} 
 	}
 
-	ps->last_draw_beg_time = get_time_timespec();
+
+	// ps->last_draw_beg_time = get_time_timespec();
+	renlog_beg_time(ps, get_time_timespec());
 	
 	handle_pending_updates(EV_A_ ps);
 
@@ -1732,7 +1744,7 @@ static session_t *session_init(int argc, char **argv, Display *dpy,
 	    .gaussian_map = NULL,
 
 	    .refresh_rate = 0,
-	    .refresh_intv = 0UL,
+	    .refresh_intv = NS_PER_SEC / 60,
 	    .paint_tm_offset = 0L,
 
 #ifdef CONFIG_VSYNC_DRM
@@ -1766,11 +1778,7 @@ static session_t *session_init(int argc, char **argv, Display *dpy,
 	    .dbus_data = NULL,
 #endif
 		
-		.last_presented_vblank_time = {0},
-		.last_total_draw_time = {0},
-		.last_draw_beg_time = {0},
-		.last_draw_end_time = {0},
-		.draw_data_exists = false,
+		.render_log = RENDER_LOG_INIT
 	};
 
 	auto stderr_logger = stderr_logger_new();
