@@ -575,25 +575,31 @@ static inline void renlog_end_time(session_t *ps, struct timespec etime) {
 	
 	struct timespec total_draw_time = { 0 };
 	timespec_subtract(&total_draw_time, &ps->render_log._last_draw_end_time, &ps->render_log._last_draw_beg_time);
+	
+	// Temp hacK: don't taint the log with absurd render times.
+	if (total_draw_time.tv_nsec < NS_PER_SEC / 60) {
+		// Commit this total drawing time to the log and advance the write head.
+		ps->render_log._log[ps->render_log._log_write_head] = total_draw_time.tv_nsec;
+		log_info("Render time: %ld", total_draw_time.tv_nsec);
 
-	// Commit this total drawing time to the log and advance the write head.
-	ps->render_log._log[ps->render_log._log_write_head] = total_draw_time.tv_nsec;
-	log_info("Render time: %ld", total_draw_time.tv_nsec);
+		ps->render_log._log_write_head = (ps->render_log._log_write_head + 1) % LAST_PRESENTED_FRAMES_TO_LOG;
+		// if (ps->render_log._log_write_head == LAST_PRESENTED_FRAMES_TO_LOG - 1) {
+		// 	ps->render_log._log_write_head = 0;
+		// } else {
+		// 	ps->render_log._log_write_head++;
+		// }
 
-	if (ps->render_log._log_write_head == LAST_PRESENTED_FRAMES_TO_LOG - 1) {
-		ps->render_log._log_write_head = 0;
-	} else {
-		ps->render_log._log_write_head++;
-	}
-
-	// Find the longest render time in the log.
-	long _curr_max = 0;
-	for (int i = 0; i < LAST_PRESENTED_FRAMES_TO_LOG; i++) {
-		if (ps->render_log._log[i] > _curr_max) {
-			_curr_max = ps->render_log._log[i];
+		// Find the longest render time in the log.
+		long _curr_max = 0;
+		for (int i = 0; i < LAST_PRESENTED_FRAMES_TO_LOG; i++) {
+			if (ps->render_log._log[i] > _curr_max) {
+				_curr_max = ps->render_log._log[i];
+			}
 		}
+		ps->render_log.longest_render_time = _curr_max;
+	} else {
+		log_info("Absurd render time: %ld", total_draw_time.tv_nsec);
 	}
-	ps->render_log.longest_render_time = _curr_max;
 }
 
 static inline void renlog_last_vblank_time(session_t *ps, struct timespec last_vblank) {
@@ -628,13 +634,13 @@ static inline bool get_delay_time(session_t *ps, struct timespec *now, struct ti
 
 	struct timespec time_left_until_vblank;
 	timespec_subtract(&time_left_until_vblank, &ps->render_log._next_estimated_vblank_time, now);
-	log_info("%ld is left until next vblank time. The longest render time is %ld", 
+	log_info("%ld is left until next vblank time. The longest render time is %ld.", 
 		time_left_until_vblank.tv_nsec, ps->render_log.longest_render_time);
 
-	long buffer = 3000000;
-	if (ps->render_log.longest_render_time + buffer < time_left_until_vblank.tv_nsec) {
+	long gpu_buffer = 5000000;
+	if (ps->render_log.longest_render_time + gpu_buffer < time_left_until_vblank.tv_nsec) {
 		delay_time->tv_sec = 0;
-		delay_time->tv_nsec = time_left_until_vblank.tv_nsec - (ps->render_log.longest_render_time + buffer);
+		delay_time->tv_nsec = time_left_until_vblank.tv_nsec - (ps->render_log.longest_render_time + gpu_buffer);
 
 		return true;
 	}
