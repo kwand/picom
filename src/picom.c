@@ -69,7 +69,7 @@
 		(session_t *)((char *)__mptr - offsetof(session_t, member));             \
 	})
 
-static const long SWOPTI_TOLERANCE = 3000;
+// static const long SWOPTI_TOLERANCE = 3000;
 
 static bool must_use redirect_start(session_t *ps);
 
@@ -1105,58 +1105,58 @@ void update_refresh_rate(session_t *ps) {
 		ps->refresh_intv = 0;
 }
 
-/**
- * Initialize refresh-rated based software optimization.
- *
- * @return true for success, false otherwise
- */
-static bool swopti_init(session_t *ps) {
-	log_warn("--sw-opti is going to be deprecated. If you get real benefits from "
-	         "using "
-	         "this option, please open an issue to let us know.");
-	// Prepare refresh rate
-	// Check if user provides one
-	ps->refresh_rate = ps->o.refresh_rate;
-	if (ps->refresh_rate)
-		ps->refresh_intv = US_PER_SEC / ps->refresh_rate;
+// /**
+//  * Initialize refresh-rated based software optimization.
+//  *
+//  * @return true for success, false otherwise
+//  */
+// static bool swopti_init(session_t *ps) {
+// 	log_warn("--sw-opti is going to be deprecated. If you get real benefits from "
+// 	         "using "
+// 	         "this option, please open an issue to let us know.");
+// 	// Prepare refresh rate
+// 	// Check if user provides one
+// 	ps->refresh_rate = ps->o.refresh_rate;
+// 	if (ps->refresh_rate)
+// 		ps->refresh_intv = US_PER_SEC / ps->refresh_rate;
 
-	// Auto-detect refresh rate otherwise
-	if (!ps->refresh_rate && ps->randr_exists) {
-		update_refresh_rate(ps);
-	}
+// 	// Auto-detect refresh rate otherwise
+// 	if (!ps->refresh_rate && ps->randr_exists) {
+// 		update_refresh_rate(ps);
+// 	}
 
-	// Turn off vsync_sw if we can't get the refresh rate
-	if (!ps->refresh_rate)
-		return false;
+// 	// Turn off vsync_sw if we can't get the refresh rate
+// 	if (!ps->refresh_rate)
+// 		return false;
 
-	return true;
-}
+// 	return true;
+// }
 
-/**
- * Modify a struct timeval timeout value to render at a fixed pace.
- *
- * @param ps current session
- * @param[in,out] ptv pointer to the timeout
- */
-static double swopti_handle_timeout(session_t *ps) {
-	if (!ps->refresh_intv)
-		return 0;
+// /**
+//  * Modify a struct timeval timeout value to render at a fixed pace.
+//  *
+//  * @param ps current session
+//  * @param[in,out] ptv pointer to the timeout
+//  */
+// static double swopti_handle_timeout(session_t *ps) {
+// 	if (!ps->refresh_intv)
+// 		return 0;
 
-	// Get the microsecond offset of the time when the we reach the timeout
-	// I don't think a 32-bit long could overflow here.
-	long offset = (get_time_timeval().tv_usec - ps->paint_tm_offset) % ps->refresh_intv;
-	// XXX this formula dones't work if refresh rate is not a whole number
-	if (offset < 0)
-		offset += ps->refresh_intv;
+// 	// Get the microsecond offset of the time when the we reach the timeout
+// 	// I don't think a 32-bit long could overflow here.
+// 	long offset = (get_time_timeval().tv_usec - ps->paint_tm_offset) % ps->refresh_intv;
+// 	// XXX this formula dones't work if refresh rate is not a whole number
+// 	if (offset < 0)
+// 		offset += ps->refresh_intv;
 
-	// If the target time is sufficiently close to a refresh time, don't add
-	// an offset, to avoid certain blocking conditions.
-	if (offset < SWOPTI_TOLERANCE || offset > ps->refresh_intv - SWOPTI_TOLERANCE)
-		return 0;
+// 	// If the target time is sufficiently close to a refresh time, don't add
+// 	// an offset, to avoid certain blocking conditions.
+// 	if (offset < SWOPTI_TOLERANCE || offset > ps->refresh_intv - SWOPTI_TOLERANCE)
+// 		return 0;
 
-	// Add an offset so we wait until the next refresh after timeout
-	return (double)(ps->refresh_intv - offset) / 1e6;
-}
+// 	// Add an offset so we wait until the next refresh after timeout
+// 	return (double)(ps->refresh_intv - offset) / 1e6;
+// }
 
 /**
  * Initialize X composite overlay window.
@@ -1509,17 +1509,6 @@ static void draw_callback_impl(EV_P_ session_t *ps, int revents attr_unused) {
 	// 	}
 	// }
 
-	if (render_log_is_valid(ps)) {
-		struct timespec now = get_time_timespec();
-
-		struct timespec delay_time = { 0 };
-		if (estimate_next_vblank(ps, &now) && get_delay_time(ps, &now, &delay_time)) {
-			log_info("Delaying by %ld.", delay_time.tv_nsec);
-			nanosleep(&delay_time, NULL);
-		} 
-	}
-
-
 	// ps->last_draw_beg_time = get_time_timespec();
 	renlog_beg_time(ps, get_time_timespec());
 	
@@ -1609,17 +1598,17 @@ static void draw_callback_impl(EV_P_ session_t *ps, int revents attr_unused) {
 	ps->redraw_needed = false;
 }
 
-static void draw_callback(EV_P_ ev_idle *w, int revents) {
-	// This function is not used if we are using --swopti
-	session_t *ps = session_ptr(w, draw_idle);
+// static void draw_callback(EV_P_ ev_idle *w, int revents) {
+// 	// This function is not used if we are using --swopti
+// 	session_t *ps = session_ptr(w, draw_idle);
 
-	draw_callback_impl(EV_A_ ps, revents);
+// 	draw_callback_impl(EV_A_ ps, revents);
 
-	// Don't do painting non-stop unless we are in benchmark mode
-	if (!ps->o.benchmark) {
-		ev_idle_stop(EV_A_ & ps->draw_idle);
-	}
-}
+// 	// Don't do painting non-stop unless we are in benchmark mode
+// 	if (!ps->o.benchmark) {
+// 		ev_idle_stop(EV_A_ & ps->draw_idle);
+// 	}
+// }
 
 static void delayed_draw_timer_callback(EV_P_ ev_timer *w, int revents) {
 	session_t *ps = session_ptr(w, delayed_draw_timer);
@@ -1632,19 +1621,29 @@ static void delayed_draw_timer_callback(EV_P_ ev_timer *w, int revents) {
 }
 
 static void delayed_draw_callback(EV_P_ ev_idle *w, int revents) {
-	// This function is only used if we are using --swopti
+	// Re-purposed for render-log based delay.
 	session_t *ps = session_ptr(w, draw_idle);
 	assert(ps->redraw_needed);
 	assert(!ev_is_active(&ps->delayed_draw_timer));
 
-	double delay = swopti_handle_timeout(ps);
-	if (delay < 1e-6) {
+	if (!render_log_is_valid(ps)) {
 		if (!ps->o.benchmark) {
 			ev_idle_stop(EV_A_ & ps->draw_idle);
 		}
 		return draw_callback_impl(EV_A_ ps, revents);
 	}
+	
+	struct timespec now = get_time_timespec();
+	double delay;
 
+	if (!estimate_next_vblank(ps, &now) || !get_delay_time(ps, &now, &delay)) {
+		if (!ps->o.benchmark) {
+			ev_idle_stop(EV_A_ & ps->draw_idle);
+		}
+		return draw_callback_impl(EV_A_ ps, revents);
+	} 
+
+	log_info("Delaying by %f.", delay);
 	// This is a little bit hacky. When we get to this point in code, we need
 	// to update the screen , but we will only be updating after a delay, So
 	// we want to stop the ev_idle, so this callback doesn't get call repeatedly
@@ -2158,8 +2157,8 @@ static session_t *session_init(int argc, char **argv, Display *dpy,
 	}
 
 	// Initialize software optimization
-	if (ps->o.sw_opti)
-		ps->o.sw_opti = swopti_init(ps);
+	// if (ps->o.sw_opti)
+	// 	ps->o.sw_opti = swopti_init(ps);
 
 	// Monitor screen changes if vsync_sw is enabled and we are using
 	// an auto-detected refresh rate, or when Xinerama features are enabled
@@ -2186,10 +2185,10 @@ static session_t *session_init(int argc, char **argv, Display *dpy,
 	ev_io_init(&ps->xiow, x_event_callback, ConnectionNumber(ps->dpy), EV_READ);
 	ev_io_start(ps->loop, &ps->xiow);
 	ev_init(&ps->unredir_timer, tmout_unredir_callback);
-	if (ps->o.sw_opti)
+	// if (ps->o.sw_opti)
 		ev_idle_init(&ps->draw_idle, delayed_draw_callback);
-	else
-		ev_idle_init(&ps->draw_idle, draw_callback);
+	// else
+	// 	ev_idle_init(&ps->draw_idle, draw_callback);
 
 	ev_init(&ps->fade_timer, fade_timer_callback);
 	ev_init(&ps->delayed_draw_timer, delayed_draw_timer_callback);

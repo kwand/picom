@@ -630,7 +630,7 @@ static inline bool estimate_next_vblank(session_t *ps, struct timespec *now) {
 	return false;
 }
 
-static inline bool get_delay_time(session_t *ps, struct timespec *now, struct timespec *delay_time) {
+static inline bool get_delay_time(session_t *ps, struct timespec *now, double *delay_time) {
 
 	struct timespec time_left_until_vblank;
 	timespec_subtract(&time_left_until_vblank, &ps->render_log._next_estimated_vblank_time, now);
@@ -639,8 +639,7 @@ static inline bool get_delay_time(session_t *ps, struct timespec *now, struct ti
 
 	long gpu_buffer = 5000000;
 	if (ps->render_log.longest_render_time + gpu_buffer < time_left_until_vblank.tv_nsec) {
-		delay_time->tv_sec = 0;
-		delay_time->tv_nsec = time_left_until_vblank.tv_nsec - (ps->render_log.longest_render_time + gpu_buffer);
+		*delay_time = (double) (time_left_until_vblank.tv_nsec - (ps->render_log.longest_render_time + gpu_buffer)) / NS_PER_SEC;
 
 		return true;
 	}
