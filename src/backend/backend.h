@@ -242,6 +242,12 @@ struct backend_operations {
 	enum driver (*detect_driver)(backend_t *backend_data);
 
 	void (*diagnostics)(backend_t *backend_data);
+
+	// ===========         Timer queries         ============
+	
+	void (*begin_timer_query)(backend_t *backend_data);
+	void (*end_timer_query)(backend_t *backend_data);
+	long (*retrieve_timer_query)(backend_t *backend_data);
 };
 
 extern struct backend_operations *backend_list[];

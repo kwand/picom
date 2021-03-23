@@ -130,7 +130,8 @@ typedef struct _latom {
 	struct _latom *next;
 } latom_t;
 
-#define LAST_PRESENTED_FRAMES_TO_LOG 30
+#define LAST_PRESENTED_FRAMES_TO_LOG 15
+#define RENDER_TIME_THRESHOLD NS_PER_SEC / 60
 
 typedef struct _renderlog {
 	long _log[LAST_PRESENTED_FRAMES_TO_LOG]; // In nanoseconds.
@@ -562,7 +563,7 @@ static inline void wintype_arr_enable(bool arr[]) {
 }
 
 static inline bool render_log_is_valid(session_t *ps) {
-	return (ps->render_log.longest_render_time > 0) && (ps->render_log._valid);
+	return (ps->render_log.longest_render_time > 0);
 }
 
 static inline void renlog_beg_time(session_t *ps, struct timespec btime) {
@@ -570,41 +571,44 @@ static inline void renlog_beg_time(session_t *ps, struct timespec btime) {
 	ps->render_log._valid = false;
 }
 
-static inline void renlog_end_time(session_t *ps, struct timespec etime) {
-	ps->render_log._last_draw_end_time = etime;
+static inline void renlog_end_time(render_log_t *render_log, struct timespec etime) {
+	render_log->_last_draw_end_time = etime;
+}
 	
-	struct timespec total_draw_time = { 0 };
-	timespec_subtract(&total_draw_time, &ps->render_log._last_draw_end_time, &ps->render_log._last_draw_beg_time);
+static inline void renlog_add_GPU_time(session_t *ps, long gputime) {
 	
-	// Temp hacK: don't taint the log with absurd render times.
-	if (total_draw_time.tv_nsec < NS_PER_SEC / 60) {
-		// Commit this total drawing time to the log and advance the write head.
-		ps->render_log._log[ps->render_log._log_write_head] = total_draw_time.tv_nsec;
-		log_info("Render time: %ld", total_draw_time.tv_nsec);
+	if (!ps->render_log._valid) {
+		struct timespec total_draw_time = { 0 };
+		timespec_subtract(&total_draw_time, &ps->render_log._last_draw_end_time, &ps->render_log._last_draw_beg_time);
+		total_draw_time.tv_nsec += gputime;
 
-		ps->render_log._log_write_head = (ps->render_log._log_write_head + 1) % LAST_PRESENTED_FRAMES_TO_LOG;
-		// if (ps->render_log._log_write_head == LAST_PRESENTED_FRAMES_TO_LOG - 1) {
-		// 	ps->render_log._log_write_head = 0;
-		// } else {
-		// 	ps->render_log._log_write_head++;
-		// }
+		// Temp hack: don't taint the log with absurd render times.
+		if (total_draw_time.tv_nsec < RENDER_TIME_THRESHOLD) {
+			// Commit this total drawing time to the log and advance the write head.
+			ps->render_log._log[ps->render_log._log_write_head] = total_draw_time.tv_nsec;
+			log_info("Render time: %ld", total_draw_time.tv_nsec);
 
-		// Find the longest render time in the log.
-		long _curr_max = 0;
-		for (int i = 0; i < LAST_PRESENTED_FRAMES_TO_LOG; i++) {
-			if (ps->render_log._log[i] > _curr_max) {
-				_curr_max = ps->render_log._log[i];
+			ps->render_log._log_write_head = (ps->render_log._log_write_head + 1) % LAST_PRESENTED_FRAMES_TO_LOG;
+
+			// Find the longest render time in the log.
+			long _curr_max = 0;
+			for (int i = 0; i < LAST_PRESENTED_FRAMES_TO_LOG; i++) {
+				if (ps->render_log._log[i] > _curr_max) {
+					_curr_max = ps->render_log._log[i];
+				}
 			}
+			ps->render_log.longest_render_time = _curr_max;
+		} else {
+			log_info("Absurd render time: %ld", total_draw_time.tv_nsec);
 		}
-		ps->render_log.longest_render_time = _curr_max;
-	} else {
-		log_info("Absurd render time: %ld", total_draw_time.tv_nsec);
+		
+		ps->render_log._valid = true;
 	}
 }
 
 static inline void renlog_last_vblank_time(session_t *ps, struct timespec last_vblank) {
 	ps->render_log._last_vblank_time = last_vblank;
-	ps->render_log._valid = true;
+	// ps->render_log._valid = true;
 }
 
 static inline bool estimate_next_vblank(session_t *ps, struct timespec *now) {
@@ -637,9 +641,10 @@ static inline bool get_delay_time(session_t *ps, struct timespec *now, double *d
 	log_info("%ld is left until next vblank time. The longest render time is %ld.", 
 		time_left_until_vblank.tv_nsec, ps->render_log.longest_render_time);
 
-	long gpu_buffer = 5000000;
-	if (ps->render_log.longest_render_time + gpu_buffer < time_left_until_vblank.tv_nsec) {
-		*delay_time = (double) (time_left_until_vblank.tv_nsec - (ps->render_log.longest_render_time + gpu_buffer)) / NS_PER_SEC;
+	long buffer = 4000000;
+	if (ps->render_log.longest_render_time + buffer < time_left_until_vblank.tv_nsec) {
+		*delay_time = (double) (time_left_until_vblank.tv_nsec - (ps->render_log.longest_render_time + buffer)) / NS_PER_SEC;
+		assert(*delay_time < 0.016);
 
 		return true;
 	}

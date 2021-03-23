@@ -1573,13 +1573,13 @@ static void draw_callback_impl(EV_P_ session_t *ps, int revents attr_unused) {
 	if (ps->redirected && ps->o.stoppaint_force != ON) {
 		static int paint = 0;
 
-		log_trace("Render start, frame %d", paint);
+		log_info("Render start, frame %d", paint);
 		if (ps->o.experimental_backends) {
 			paint_all_new(ps, bottom, false);
 		} else {
 			paint_all(ps, bottom, false);
 		}
-		log_trace("Render end");
+		log_info("Render end\n");
 
 		ps->first_frame = false;
 		paint++;
@@ -1598,17 +1598,17 @@ static void draw_callback_impl(EV_P_ session_t *ps, int revents attr_unused) {
 	ps->redraw_needed = false;
 }
 
-// static void draw_callback(EV_P_ ev_idle *w, int revents) {
-// 	// This function is not used if we are using --swopti
-// 	session_t *ps = session_ptr(w, draw_idle);
+static void draw_callback(EV_P_ ev_idle *w, int revents) {
+	// This function is not used if we are using --swopti
+	session_t *ps = session_ptr(w, draw_idle);
 
-// 	draw_callback_impl(EV_A_ ps, revents);
+	draw_callback_impl(EV_A_ ps, revents);
 
-// 	// Don't do painting non-stop unless we are in benchmark mode
-// 	if (!ps->o.benchmark) {
-// 		ev_idle_stop(EV_A_ & ps->draw_idle);
-// 	}
-// }
+	// Don't do painting non-stop unless we are in benchmark mode
+	if (!ps->o.benchmark) {
+		ev_idle_stop(EV_A_ & ps->draw_idle);
+	}
+}
 
 static void delayed_draw_timer_callback(EV_P_ ev_timer *w, int revents) {
 	session_t *ps = session_ptr(w, delayed_draw_timer);
@@ -1623,7 +1623,7 @@ static void delayed_draw_timer_callback(EV_P_ ev_timer *w, int revents) {
 static void delayed_draw_callback(EV_P_ ev_idle *w, int revents) {
 	// Re-purposed for render-log based delay.
 	session_t *ps = session_ptr(w, draw_idle);
-	assert(ps->redraw_needed);
+	// assert(ps->redraw_needed);
 	assert(!ev_is_active(&ps->delayed_draw_timer));
 
 	if (!render_log_is_valid(ps)) {
@@ -2185,10 +2185,10 @@ static session_t *session_init(int argc, char **argv, Display *dpy,
 	ev_io_init(&ps->xiow, x_event_callback, ConnectionNumber(ps->dpy), EV_READ);
 	ev_io_start(ps->loop, &ps->xiow);
 	ev_init(&ps->unredir_timer, tmout_unredir_callback);
-	// if (ps->o.sw_opti)
+	if (ps->o.experimental_backends)
 		ev_idle_init(&ps->draw_idle, delayed_draw_callback);
-	// else
-	// 	ev_idle_init(&ps->draw_idle, draw_callback);
+	else
+		ev_idle_init(&ps->draw_idle, draw_callback);
 
 	ev_init(&ps->fade_timer, fade_timer_callback);
 	ev_init(&ps->delayed_draw_timer, delayed_draw_timer_callback);

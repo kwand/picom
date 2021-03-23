@@ -93,6 +93,12 @@ void paint_all_new(session_t *ps, struct managed_win *t, bool ignore_damage) {
 	// region, that won't be cleared by the next render, and will thus accumulate.
 	// (e.g. if shadow is drawn outside the damaged region, it will become thicker and
 	// thicker over time.)
+	// 
+	
+	// Begin GPU timer query.
+	if (ps->backend_data->ops->begin_timer_query) {
+		ps->backend_data->ops->begin_timer_query(ps->backend_data);
+	}
 
 	/// The adjusted damaged regions
 	region_t reg_paint;
@@ -416,7 +422,7 @@ void paint_all_new(session_t *ps, struct managed_win *t, bool ignore_damage) {
 	
 	// ps->last_draw_end_time = get_time_timespec();
 	// timespec_subtract(&ps->last_total_draw_time, &ps->last_draw_end_time, &ps->last_draw_beg_time);
-	renlog_end_time(ps, get_time_timespec());
+	// renlog_end_time(ps, get_time_timespec());
 
 	if (ps->backend_data->ops->present) {
 		// Present the rendered scene
@@ -425,6 +431,12 @@ void paint_all_new(session_t *ps, struct managed_win *t, bool ignore_damage) {
 		// ps->last_presented_vblank_time = get_time_timespec();
 		// ps->draw_data_exists = true;
 		renlog_last_vblank_time(ps, get_time_timespec());
+	}
+	
+	if (ps->backend_data->ops->retrieve_timer_query) {
+		long result = ps->backend_data->ops->retrieve_timer_query(ps->backend_data);
+		log_info("GPU Time: %ld", result);
+		renlog_add_GPU_time(ps, result);
 	}
 
 	pixman_region32_fini(&reg_damage);

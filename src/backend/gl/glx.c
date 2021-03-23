@@ -46,6 +46,9 @@ struct _glx_data {
 	int screen;
 	xcb_window_t target_win;
 	GLXContext ctx;
+	bool timer_on;
+	GLuint timer_query;
+	render_log_t *render_log;
 };
 
 #define glXGetFBConfigAttribChecked(a, b, attr, c)                                       \
@@ -349,6 +352,12 @@ static backend_t *glx_init(session_t *ps) {
 	} else {
 		glx_set_swap_interval(0, ps->dpy, tgt);
 	}
+	
+	// Setup timer query object
+	gd->timer_on = false;
+	glGenQueries(1, &gd->timer_query);
+	
+	gd->render_log = &ps->render_log;
 
 	success = true;
 
@@ -465,6 +474,13 @@ err:
 static void glx_present(backend_t *base, const region_t *region attr_unused) {
 	struct _glx_data *gd = (void *)base;
 	gl_present(base, region);
+	
+	if (gd->timer_on) {
+		glEndQuery(GL_TIME_ELAPSED);
+	}
+	
+	renlog_end_time(gd->render_log, get_time_timespec());
+	
 	glXSwapBuffers(gd->display, gd->target_win);
 	// glFinish is apparently not needed if maxFramesAllowed is set to 1? 
 	// Since the above swap buffers call should block already.
@@ -472,6 +488,27 @@ static void glx_present(backend_t *base, const region_t *region attr_unused) {
 	// NOTE: Actually, the above is not quite correct. Apparently, glXSwapBuffers
 	// blocks by default on nvidia with or without the flag? 
 	// (TODO: more testing is needed)
+}
+
+static void glx_begin_timer_query(backend_t *base) {
+	struct _glx_data *gd = (void *)base;
+	glBeginQuery(GL_TIME_ELAPSED, gd->timer_query);
+	gd->timer_on = true;
+}
+
+static void glx_end_timer_query(backend_t *base) {
+	struct _glx_data *gd = (void *)base;
+	glEndQuery(GL_TIME_ELAPSED);
+	gd->timer_on = false;
+}
+
+static long glx_retrieve_timer_query(backend_t *base) {
+	struct _glx_data *gd = (void *)base;
+	GLuint64 elapsed_time = 0;
+
+	glGetQueryObjectui64v(gd->timer_query, GL_QUERY_RESULT, &elapsed_time);
+
+	return (long) elapsed_time;
 }
 
 static int glx_buffer_age(backend_t *base) {
@@ -543,6 +580,9 @@ struct backend_operations glx_ops = {
     .get_blur_size = gl_get_blur_size,
     .diagnostics = glx_diagnostics,
     .max_buffer_age = 5,        // Why?
+	.begin_timer_query = glx_begin_timer_query,
+	.end_timer_query = glx_end_timer_query,
+	.retrieve_timer_query = glx_retrieve_timer_query,
 };
 
 /**
