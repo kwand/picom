@@ -181,6 +181,7 @@ static const struct picom_option picom_options[] = {
                                                                              "you want to attach a debugger to picom"},
     {"no-ewmh-fullscreen"          , no_argument      , 803, NULL          , "Do not use EWMH to detect fullscreen windows. Reverts to checking if a "
                                                                              "window is fullscreen based only on its size and coordinates."},
+	{"lut3d-cube"				   , required_argument, 804, "PATH"		   , "Temp: Specify .cube 3D LUT path."}
 };
 // clang-format on
 
@@ -738,6 +739,16 @@ bool get_cfg(options_t *opt, int argc, char *const *argv, bool shadow_enable,
 			break;
 		P_CASEBOOL(802, debug_mode);
 		P_CASEBOOL(803, no_ewmh_fullscreen);
+		case 804: {
+			// --3dlut-cube
+			scoped_charp cwd = getcwd(NULL, 0);
+			opt->lut3d_file =
+			    locate_auxiliary_file("shaders", optarg, cwd); // TODO: Decide on directory to store.
+			if (!opt->lut3d_file) {
+				exit(1);
+			}
+			break;
+		}
 		default: usage(argv[0], 1); break;
 #undef P_CASEBOOL
 		}
@@ -805,6 +816,11 @@ bool get_cfg(options_t *opt, int argc, char *const *argv, bool shadow_enable,
 			opt->window_shader_fg = NULL;
 			c2_list_free(&opt->window_shader_fg_rules, free);
 		}
+	}
+
+	if (opt->lut3d_file) }
+		if (opt->legacy_backends || opt->backend != BKEND_GLX) {
+			log_warn("Temp: 3D LUTs do not work with the legacy backends")
 	}
 
 	// Range checking and option assignments

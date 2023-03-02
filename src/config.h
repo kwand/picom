@@ -228,6 +228,8 @@ typedef struct options {
 	int corner_radius;
 	/// Rounded corners blacklist. A linked list of conditions.
 	c2_lptr_t *rounded_corners_blacklist;
+	/// Custom 3D LUT file for color correction
+	char *lut3d_file;
 
 	// === Focus related ===
 	/// Whether to try to detect WM windows and mark them as focused.

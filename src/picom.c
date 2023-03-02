@@ -1892,6 +1892,10 @@ static session_t *session_init(int argc, char **argv, Display *dpy,
 		log_debug("Default window shader: \"%s\"", ps->o.window_shader_fg);
 	}
 
+	if (ps->o.lut3d_file) {
+		log_debug("3D LUT used: \"%s\"", ps->o.lut3d_file);
+	}
+
 	if (ps->o.logpath) {
 		auto l = file_logger_new(ps->o.logpath);
 		if (l) {
@@ -1957,6 +1961,8 @@ static session_t *session_init(int argc, char **argv, Display *dpy,
 	if (load_shader_source(ps, ps->o.window_shader_fg)) {
 		log_error("Failed to load window shader source file");
 	}
+
+	// TODO: Load the 3D LUT file
 
 	if (log_get_level_tls() <= LOG_LEVEL_DEBUG) {
 		HASH_ITER2(ps->shaders, shader) {

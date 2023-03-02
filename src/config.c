@@ -787,6 +787,7 @@ char *parse_config(options_t *opt, const char *config_file, bool *shadow_enable,
 	    .detect_transient = false,
 	    .detect_client_leader = false,
 	    .no_ewmh_fullscreen = false,
+		.lut3d_file = NULL,
 
 	    .track_leader = false,
 
